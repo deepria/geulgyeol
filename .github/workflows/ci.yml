@@ -31,7 +31,7 @@ jobs:
           docker build -t playground-ci .
           docker run -d --name playground-ci -p 127.0.0.1:8080:8080 playground-ci
           trap 'docker logs playground-ci; docker stop playground-ci' EXIT
-          curl --fail --retry 10 --retry-connrefused --retry-delay 2 http://127.0.0.1:8080/healthz
+          curl --fail --retry 10 --retry-all-errors --retry-delay 2 --max-time 5 http://127.0.0.1:8080/healthz
           curl --fail http://127.0.0.1:8080/ | grep 'deepria'
           curl --fail http://127.0.0.1:8080/nested/route | grep 'id="app"'
           curl --fail http://127.0.0.1:8080/version.json | grep 'revision'
