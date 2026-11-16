@@ -39,7 +39,7 @@ h1 { font-family: 'Gowun Batang', serif; font-weight: 400; font-size: clamp(48px
 .preview-topline button { font-size: 10px; color: #d4d9ff; padding: 5px; }
 .preview-topline button span { margin-left: 6px; }
 .handwriting-preview { font-family: 'Gowun Batang', serif; font-size: clamp(26px, 2.6vw, 42px); line-height: 1.55; margin: 23px 0; min-height: 180px; overflow-wrap: anywhere; white-space: pre-wrap; }
-.preview-glyph { width: 1em; height: 1em; vertical-align: -.13em; margin-right: var(--letter-spacing); fill: #fff8e5; }
+.preview-glyph { width: 1em; height: 1em; vertical-align: -.2em; overflow: visible; margin-right: var(--letter-spacing); fill: #fff8e5; }
 .fallback-glyph { color: #a8afe6; display: inline-block; width: 1em; margin-right: var(--letter-spacing); }
 .preview-space { display: inline-block; width: .5em; margin-right: var(--letter-spacing); }
 .preview-input-label { font-size: 10px; color: #d3d7fc; display: block; margin-bottom: 8px; }
@@ -66,7 +66,7 @@ h2 { font-size: 28px; letter-spacing: -1.3px; font-weight: 600; margin: 0; }
 .guide-box { stroke: #dcdad1; stroke-width: 1; fill: none; stroke-dasharray: 5 5; }
 .guide-line { stroke: #e5e2d8; stroke-width: 1; stroke-dasharray: 4 5; }
 .baseline { stroke: #c1c7e0; stroke-width: 1; }
-.ghost-character { font-family: 'Gowun Batang', serif; font-size: 285px; fill: #eae8e1; pointer-events: none; }
+.ghost-character { font-family: 'Gowun Batang', serif; fill: #eae8e1; pointer-events: none; }
 .ink { fill: #333fc3; pointer-events: none; }
 .pad-caption { position: absolute; left: 0; bottom: 14px; width: 100%; text-align: center; font-size: 9px; color: #a4a19c; pointer-events: none; }
 .pad-corner { position: absolute; bottom: 13px; right: 17px; font-size: 16px; color: #9c9aa8; pointer-events: none; }

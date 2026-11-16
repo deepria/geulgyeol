@@ -98,3 +98,61 @@ test('project JSON round-trip restores ink, settings and preview', async ({ page
   await expect(page.getByRole('status')).toContainText('획 좌표가 올바르지 않아요')
   await expect(page.locator('.ink path')).toHaveCount(1)
 })
+
+test('tracing the guide matches fallback size and baseline in preview and OTF', async ({ page }) => {
+  await page.goto('/')
+  await page.evaluate(() => document.fonts.ready)
+  const reference = await page.locator('.ghost-character').evaluate(element => {
+    const context = document.createElement('canvas').getContext('2d')!
+    const ghost = element as SVGTextElement
+    const ghostStyle = getComputedStyle(ghost)
+    context.font = `${ghostStyle.fontSize} ${ghostStyle.fontFamily}`
+    context.textAlign = 'center'
+    const metrics = context.measureText('안')
+    const preview = document.querySelector('.handwriting-preview')!
+    const previewStyle = getComputedStyle(preview)
+    context.font = `${previewStyle.fontSize} ${previewStyle.fontFamily}`
+    const target = context.measureText('안')
+    return {
+      left: ghost.x.baseVal.getItem(0).value - metrics.actualBoundingBoxLeft,
+      right: ghost.x.baseVal.getItem(0).value + metrics.actualBoundingBoxRight,
+      top: ghost.y.baseVal.getItem(0).value - metrics.actualBoundingBoxAscent,
+      bottom: ghost.y.baseVal.getItem(0).value + metrics.actualBoundingBoxDescent,
+      previewSize: parseFloat(previewStyle.fontSize),
+      targetHeight: target.actualBoundingBoxAscent + target.actualBoundingBoxDescent,
+      targetDescent: target.actualBoundingBoxDescent,
+    }
+  })
+  const pad = page.locator('.writing-pad')
+  await pad.scrollIntoViewIfNeeded()
+  const box = (await pad.boundingBox())!
+  const coordinates = [[reference.left, reference.top], [reference.right, reference.top], [reference.right, reference.bottom], [reference.left, reference.bottom], [reference.left, reference.top]]
+  for (let index = 0; index < coordinates.length; index++) {
+    const [x, y] = coordinates[index]!
+    await page.mouse.move(box.x + x! / 500 * box.width, box.y + y! / 500 * box.height, { steps: index ? 20 : 1 })
+    if (!index) await page.mouse.down()
+  }
+  await page.mouse.up()
+  const preview = await page.locator('.preview-glyph').first().evaluate(element => {
+    const svg = element as SVGSVGElement
+    const ink = svg.querySelector('g')!.getBoundingClientRect()
+    const frame = svg.getBoundingClientRect()
+    return { height: ink.height, descent: ink.bottom - (frame.top + frame.height * .8) }
+  })
+  expect(preview.height / reference.targetHeight).toBeGreaterThan(.98)
+  expect(preview.height / reference.targetHeight).toBeLessThan(1.10)
+  expect(Math.abs(preview.descent - reference.targetDescent)).toBeLessThan(reference.previewSize * .05)
+  await expect(page.locator('.save-state')).toContainText('저장됨')
+  await page.reload()
+  await expect(page.locator('.preview-glyph')).toHaveCount(1)
+  await page.getByRole('button', { name: '글꼴 내보내기' }).click()
+  const pending = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'OTF 글꼴 다운로드 ↓' }).click()
+  const data = await readFile((await (await pending).path())!)
+  const font = opentype.parse(data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer)
+  const bounds = font.charToGlyph('안').getBoundingBox()
+  const exportedHeight = (bounds.y2 - bounds.y1) / 1000 * reference.previewSize
+  expect(Math.abs(exportedHeight - preview.height)).toBeLessThan(.2)
+  const exportedDescent = -bounds.y1 / 1000 * reference.previewSize
+  expect(Math.abs(exportedDescent - preview.descent)).toBeLessThan(.2)
+})

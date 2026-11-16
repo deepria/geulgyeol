@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { strokePath, type Point, type Stroke } from '../font'
+import { WRITING_REFERENCE, strokePath, type Point, type Stroke } from '../font'
 const props = defineProps<{ character: string; strokes: Stroke[]; thickness: number }>()
 const emit = defineEmits<{ commit: [stroke: Stroke] }>()
 const current = ref<Stroke>([])
@@ -36,8 +36,8 @@ function finish(event: PointerEvent) {
     <rect width="500" height="500" fill="url(#paper-dots)" />
     <rect x="65" y="65" width="370" height="370" rx="2" class="guide-box" />
     <path d="M250 65V435M65 250H435" class="guide-line" />
-    <text v-if="!strokes.length && !current.length" x="250" y="353" text-anchor="middle" class="ghost-character">{{ character }}</text>
+    <text v-if="!strokes.length && !current.length" :x="WRITING_REFERENCE.centerX" :y="WRITING_REFERENCE.baseline" :font-size="WRITING_REFERENCE.fontSize" text-anchor="middle" class="ghost-character">{{ character }}</text>
     <g class="ink"><path v-for="(path, index) in paths" :key="index" :d="path" /></g>
-    <path d="M65 435H435" class="baseline" />
+    <path :d="`M65 ${WRITING_REFERENCE.baseline}H435`" class="baseline" />
   </svg>
 </template>

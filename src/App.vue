@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import WritingPad from './components/WritingPad.vue'
-import { STARTER, DEFAULT_SETTINGS, createFont, download, hasInk, parseProject, strokePath, uniqueCharacters, type Glyphs, type Project, type Stroke } from './font'
+import { STARTER, DEFAULT_SETTINGS, createFont, download, hasInk, parseProject, previewTransform, strokePath, uniqueCharacters, type Glyphs, type Project, type Stroke } from './font'
 
 const STORAGE_KEY = 'geulgyeol.project.v1'
 const glyphs = ref<Glyphs>({})
@@ -119,7 +119,7 @@ const previewPaths = (char: string) => (glyphs.value[char] ?? []).map(stroke => 
             <template v-for="(char, index) in previewLetters" :key="index">
               <br v-if="char === '\n'" />
               <span v-else-if="/\s/.test(char)" class="preview-space">&nbsp;</span>
-              <svg v-else-if="hasInk(glyphs[char])" viewBox="0 0 500 500" class="preview-glyph" aria-hidden="true"><g :transform="`translate(250 250) scale(${settings.scale}) translate(-250 -250)`"><path v-for="(path, pathIndex) in previewPaths(char)" :key="pathIndex" :d="path" /></g></svg>
+              <svg v-else-if="hasInk(glyphs[char])" viewBox="0 0 500 500" class="preview-glyph" aria-hidden="true"><g :transform="previewTransform(settings.scale)"><path v-for="(path, pathIndex) in previewPaths(char)" :key="pathIndex" :d="path" /></g></svg>
               <span v-else class="fallback-glyph" aria-hidden="true">{{ char }}</span>
             </template>
           </div>

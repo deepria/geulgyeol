@@ -7,6 +7,21 @@ export interface Settings { thickness: number; scale: number; spacing: number }
 export interface Project { version: 1; glyphs: Glyphs; characters: string[]; settings: Settings; preview: string; name: string }
 export const STARTER = '안녕하세요 나만의 손글씨로 오늘을 기록해요. 작은 마음이 모여 좋은 하루가 됩니다.'
 export const DEFAULT_SETTINGS: Settings = { thickness: 13, scale: 1, spacing: 0 }
+// The faint reference is a 285-unit font inside a 500-unit writing area.
+// Convert its em size and baseline, rather than shrinking the pad and its margins.
+export const WRITING_REFERENCE = { fontSize: 285, centerX: 250, baseline: 353 } as const
+export function glyphTransform(scale: number) {
+  const factor = 500 / WRITING_REFERENCE.fontSize * scale
+  return {
+    factor,
+    x: 250 - WRITING_REFERENCE.centerX * factor,
+    y: 250 + (400 - 250) * scale - WRITING_REFERENCE.baseline * factor,
+  }
+}
+export function previewTransform(scale: number): string {
+  const transform = glyphTransform(scale)
+  return `matrix(${transform.factor} 0 0 ${transform.factor} ${transform.x} ${transform.y})`
+}
 export const uniqueCharacters = (text: string) => [...new Set([...text.normalize('NFC')].filter(char => !/\s/u.test(char)))].slice(0, 200)
 export const hasInk = (strokes?: Stroke[]) => !!strokes?.some(stroke => stroke.length > 0)
 
@@ -54,6 +69,7 @@ export async function createFont(glyphs: Glyphs, settings: Settings, name: strin
   for (const [char, strokes] of Object.entries(glyphs)) {
     if (!hasInk(strokes)) continue
     const path = new Path()
+    const transform = glyphTransform(settings.scale)
     for (const stroke of strokes) {
       const points = outline(stroke, settings.thickness)
       if (!points.length) continue
@@ -61,8 +77,8 @@ export async function createFont(glyphs: Glyphs, settings: Settings, name: strin
       const area = points.reduce((sum, p, i) => { const q = points[(i + 1) % points.length]!; return sum + p[0]! * q[1]! - q[0]! * p[1]! }, 0)
       if (area < 0) points.reverse()
       points.forEach((p, index) => {
-        const x = (250 + (p[0]! - 250) * settings.scale) * 2
-        const y = 800 - (250 + (p[1]! - 250) * settings.scale) * 2
+        const x = (p[0]! * transform.factor + transform.x) * 2
+        const y = 800 - (p[1]! * transform.factor + transform.y) * 2
         if (index === 0) path.moveTo(x, y)
         else path.lineTo(x, y)
       })
