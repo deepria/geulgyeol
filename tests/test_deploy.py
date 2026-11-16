@@ -5,7 +5,7 @@ from scripts import deploy
 UUID = 'test-app'
 SHA = 'a' * 40
 APP = {'uuid': UUID, 'build_pack': 'dockerfile', 'git_branch': 'deploy',
-       'git_repository': 'https://github.com/deepria/temp.git'}
+       'git_repository': 'https://github.com/deepria/geulgyeol.git'}
 ENV = {'COOLIFY_APPLICATION_UUID': UUID, 'CF_ACCESS_CLIENT_ID': 'cf-id',
        'CF_ACCESS_CLIENT_SECRET': 'cf-secret', 'COOLIFY_READ_TOKEN': 'read-token',
        'COOLIFY_DEPLOY_TOKEN': 'deploy-token'}
@@ -21,7 +21,7 @@ class DeployTests(unittest.TestCase):
         calls = request.call_args_list
         self.assertEqual(calls[0].kwargs['headers']['Authorization'], 'Bearer read-token')
         self.assertEqual(calls[1].args[2]['Authorization'], 'Bearer deploy-token')
-        self.assertTrue(calls[-1].args[0].startswith('https://temp.deepria.com/'))
+        self.assertTrue(calls[-1].args[0].startswith('https://geulgyeol.deepria.com/'))
         self.assertEqual(len(calls[-1].args), 1)
         self.assertEqual(calls[-1].kwargs, {})
 
@@ -49,6 +49,12 @@ class DeployTests(unittest.TestCase):
         with self.assertRaises(deploy.DeploymentError):
             deploy.deploy(SHA)
         self.assertEqual(request.call_count, 3)
+
+    def test_repository_rename_keeps_exact_identity(self):
+        for repository in ['https://github.com/deepria/geulgyeol.git', 'git@github.com:deepria/geulgyeol.git', 'deepria/geulgyeol', 'https://github.com/deepria/temp.git']:
+            deploy.verify_application(APP | {'git_repository': repository}, UUID)
+        with self.assertRaises(deploy.DeploymentError):
+            deploy.verify_application(APP | {'git_repository': 'https://github.com/deepria/geulgyeol-other.git'}, UUID)
 
     def test_invalid_revision_rejected(self):
         with self.assertRaises(deploy.DeploymentError):

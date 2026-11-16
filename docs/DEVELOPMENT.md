@@ -42,33 +42,33 @@ PR에서는 검사만 실행합니다. `deploy`는 Actions가 관리하는 자�
 
 ## 최초 Coolify 연결 — 사용자 실행
 
-1. 첫 [Actions](https://github.com/deepria/temp/actions) 실행이 성공하고 `deploy` 브랜치가 생성됐는지 확인합니다.
+1. 첫 [Actions](https://github.com/deepria/geulgyeol/actions) 실행이 성공하고 `deploy` 브랜치가 생성됐는지 확인합니다.
 2. Coolify의 **deepria → production → New Resource → Public Repository**에서 앱을 생성합니다. 기존 앱이 있으면 새로 만들지 말고 같은 값을 적용합니다.
 
 | 설정 | 값 |
 | --- | --- |
-| Repository | `https://github.com/deepria/temp.git` |
+| Repository | `https://github.com/deepria/geulgyeol.git` |
 | Branch | **`deploy`** |
 | Build Pack | **Dockerfile** |
 | Base Directory | `/` |
 | Dockerfile Location | `/Dockerfile` |
 | Ports Exposes | **`8080`** |
-| Domains | **`http://temp.deepria.com`** |
+| Domains | **`http://geulgyeol.deepria.com`** |
 | Auto Deploy | **꺼짐 / Manual deployments only** |
 | Health Check | HTTP, port `8080`, path `/healthz`, expected `200` |
 | Memory / CPU | 예: `128m` / `0.5`, 빌드 자원 제한은 별도 |
 | Storage / DB / Port mappings | 추가하지 않음 |
 
-기존 구성이 Cloudflare Tunnel에서 HTTPS를 종료하고 Traefik에 HTTP로 전달하는 구조이므로 Coolify 도메인은 `http://`로 지정합니다. 사용자 접속은 `https://temp.deepria.com`입니다. 별도 origin TLS 구조라면 실제 구성에 맞추세요.
+기존 구성이 Cloudflare Tunnel에서 HTTPS를 종료하고 Traefik에 HTTP로 전달하는 구조이므로 Coolify 도메인은 `http://`로 지정합니다. 사용자 접속은 `https://geulgyeol.deepria.com`입니다. 별도 origin TLS 구조라면 실제 구성에 맞추세요.
 
 3. **기존 `deepria-web-platform` Tunnel**에 Published application route를 추가합니다.
-   - Hostname: `temp.deepria.com`
+   - Hostname: `geulgyeol.deepria.com`
    - Service: `http://127.0.0.1:80`
    - DNS가 이 Tunnel을 가리키는지 확인합니다. 기존 Tunnel이나 다른 앱 경로는 변경하지 않습니다.
    - 현재 Tunnel이 로컬 ingress 파일 관리 방식이면 해당 파일에서 마지막 catch-all 앞에 같은 경로를 추가하고, 기존 운영 절차로 반영합니다.
    - 이 앱은 공개 실험 화면입니다. 별도 Access 로그인 정책을 붙이면 Actions의 공개 revision 검증도 해당 인증 방식에 맞게 수정해야 합니다.
 4. Coolify에서 **Deploy**를 눌러 최초 수동 배포합니다. 외부 `/healthz`가 `ok`, `/version.json`이 최신 main SHA를 반환하는지 확인합니다.
-5. [GitHub → Settings → Secrets and variables → Actions](https://github.com/deepria/temp/settings/secrets/actions)에 다음을 등록합니다. 토큰 원문을 코드·문서·채팅에 적지 않습니다.
+5. [GitHub → Settings → Secrets and variables → Actions](https://github.com/deepria/geulgyeol/settings/secrets/actions)에 다음을 등록합니다. 토큰 원문을 코드·문서·채팅에 적지 않습니다.
 
 **Repository secrets**
 
@@ -81,7 +81,7 @@ PR에서는 검사만 실행합니다. `deploy`는 Actions가 관리하는 자�
 
 기존 API 경로 `coolify.deepria.com/api/v1/*`의 Service Auth 정책을 사용합니다. 다른 레포의 secret 값은 자동 복사되지 않으므로 같은 보관 위치에서 직접 등록합니다. 전체 Access/WAF를 해제할 필요가 없습니다.
 
-**Repository variables** ([등록 화면](https://github.com/deepria/temp/settings/variables/actions))
+**Repository variables** ([등록 화면](https://github.com/deepria/geulgyeol/settings/variables/actions))
 
 | 이름 | 값 |
 | --- | --- |
@@ -94,8 +94,8 @@ PR에서는 검사만 실행합니다. `deploy`는 Actions가 관리하는 자�
 
 ## 운영 확인과 복구
 
-- `https://temp.deepria.com/healthz`: nginx HTTP 상태.
-- `https://temp.deepria.com/version.json`: 실제 서빙되는 원본 main SHA. 관리 토큰을 보내지 않습니다.
+- `https://geulgyeol.deepria.com/healthz`: nginx HTTP 상태.
+- `https://geulgyeol.deepria.com/version.json`: 실제 서빙되는 원본 main SHA. 관리 토큰을 보내지 않습니다.
 - Actions는 요청 수락뿐 아니라 Coolify의 배포 완료와 외부 SHA 일치까지 기다립니다. 실패하면 Coolify 배포 로그와 DNS/Tunnel 경로를 확인합니다. 배포 요청은 중복 방지를 위해 자동 재시도하지 않습니다.
 - 이전 상태로 되돌릴 때는 `main`의 문제 커밋을 revert하고 push합니다. 동일 검증·배포 절차를 거칩니다.
 - 코드·Dockerfile·화면만 바꿀 때는 서버에 접속할 필요가 없습니다. DB/파일 저장 기능을 붙일 때는 별도 영속 저장소·백업 등록이 필요합니다.

@@ -76,8 +76,8 @@ def verify_application(app, uuid):
     if (app.get('uuid') != uuid or app.get('build_pack') != 'dockerfile'
             or app.get('git_branch') != 'deploy'
             or app.get('git_repository', '').removesuffix('.git') not in
-            {'https://github.com/deepria/temp', 'git@github.com:deepria/temp', 'deepria/temp'}):
-        raise DeploymentError('Expected deepria/temp, deploy branch, Dockerfile build pack and matching UUID.')
+            {prefix + name for prefix in ('https://github.com/deepria/', 'git@github.com:deepria/', 'deepria/') for name in ('geulgyeol', 'temp')}):
+        raise DeploymentError('Expected deepria/geulgyeol, deploy branch, Dockerfile build pack and matching UUID.')
 
 
 def deploy(revision):
@@ -119,7 +119,7 @@ def deploy(revision):
     while time.monotonic() < deadline:
         try:
             # Public app requests never include management credentials.
-            payload = request_json('https://temp.deepria.com/version.json?revision=' + revision)
+            payload = request_json('https://geulgyeol.deepria.com/version.json?revision=' + revision)
             if payload.get('revision') == revision:
                 print('Verified public deployment: ' + revision, flush=True)
                 return
