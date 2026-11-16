@@ -115,7 +115,7 @@ const previewPaths = (char: string) => (glyphs.value[char] ?? []).map(stroke => 
         <div class="preview-intro"><p class="kicker">당신의 글씨에는, 당신이 있으니까.</p><h1 id="preview-heading">쓰는 대로,<br />나의 글꼴.</h1><p class="intro-copy">반듯하지 않아도 괜찮아요.<br />한 글자씩, 세상에 하나뿐인 글꼴을 만들어보세요.</p></div>
         <div class="live-preview">
           <div class="preview-topline"><span><i></i> 내 손글씨 미리보기</span><button @click="modal = 'adjust'">글꼴 조절 <span aria-hidden="true">↗</span></button></div>
-          <div class="handwriting-preview" role="img" :aria-label="`손글씨 미리보기: ${preview}`" :style="{ '--letter-spacing': `${settings.spacing / 10}px` }">
+          <div class="handwriting-preview" role="img" :aria-label="`손글씨 미리보기: ${preview}`" :style="{ '--letter-spacing': `${settings.spacing / 1000}em` }">
             <template v-for="(char, index) in previewLetters" :key="index">
               <br v-if="char === '\n'" />
               <span v-else-if="/\s/.test(char)" class="preview-space">&nbsp;</span>

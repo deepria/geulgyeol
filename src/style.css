@@ -41,7 +41,7 @@ h1 { font-family: 'Gowun Batang', serif; font-weight: 400; font-size: clamp(48px
 .handwriting-preview { font-family: 'Gowun Batang', serif; font-size: clamp(26px, 2.6vw, 42px); line-height: 1.55; margin: 23px 0; min-height: 180px; overflow-wrap: anywhere; white-space: pre-wrap; }
 .preview-glyph { width: 1em; height: 1em; vertical-align: -.13em; margin-right: var(--letter-spacing); fill: #fff8e5; }
 .fallback-glyph { color: #a8afe6; display: inline-block; width: 1em; margin-right: var(--letter-spacing); }
-.preview-space { font-size: .6em; }
+.preview-space { display: inline-block; width: .5em; margin-right: var(--letter-spacing); }
 .preview-input-label { font-size: 10px; color: #d3d7fc; display: block; margin-bottom: 8px; }
 #preview-input { width: 100%; border: 1px solid #ffffff38; background: #ffffff0a; border-radius: 6px; color: #e9ebff; font-size: 12px; padding: 12px 14px; resize: vertical; line-height: 1.8; min-height: 80px; max-height: 200px; }
 .preview-note { font-size: 9px; color: #c1c7f4; display: flex; align-items: center; gap: 5px; margin-top: 12px; line-height: 1.7; }

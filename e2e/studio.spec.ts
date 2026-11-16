@@ -53,6 +53,11 @@ test('exported OTF contains drawn Hangul and loads as a real font', async ({ pag
   await page.getByRole('button', { name: '글꼴 조절', exact: true }).click()
   await page.getByRole('slider', { name: '글자 간격' }).press('End')
   await page.getByRole('button', { name: '이 느낌으로 할게요' }).click()
+  const gap = await page.locator('.preview-glyph').first().evaluate(element => {
+    const style = getComputedStyle(element)
+    return parseFloat(style.marginRight) / parseFloat(style.fontSize)
+  })
+  expect(gap).toBeCloseTo(0.15, 2)
   await page.getByRole('button', { name: '글꼴 내보내기' }).click()
   await page.getByLabel('글꼴 이름').fill('나의 손글씨')
   const downloadPromise = page.waitForEvent('download')
