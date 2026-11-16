@@ -1,0 +1,10 @@
+node_modules
+.git
+.github
+dist
+*.local
+.env*
+__pycache__
+tests
+scripts
+README.md

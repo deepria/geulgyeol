@@ -1,0 +1,93 @@
+name: CI & Deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m unittest discover -s tests -v
+      - name: Build and smoke-test production container
+        run: |
+          set -euo pipefail
+          docker build -t playground-ci .
+          docker run -d --name playground-ci -p 127.0.0.1:8080:8080 playground-ci
+          trap 'docker logs playground-ci; docker stop playground-ci' EXIT
+          curl --fail --retry 10 --retry-connrefused --retry-delay 2 http://127.0.0.1:8080/healthz
+          curl --fail http://127.0.0.1:8080/ | grep 'deepria'
+          curl --fail http://127.0.0.1:8080/nested/route | grep 'id="app"'
+          curl --fail http://127.0.0.1:8080/version.json | grep 'revision'
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/assets/missing.js)" = '404'
+
+  release:
+    name: Publish validated source and deploy
+    needs: validate
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    concurrency:
+      group: temp-production
+      cancel-in-progress: false
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Skip superseded revisions
+        id: current
+        run: |
+          set -euo pipefail
+          latest=$(git ls-remote origin refs/heads/main | cut -f1)
+          if [ "$latest" = "$GITHUB_SHA" ]; then
+            echo 'deploy=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'deploy=false' >> "$GITHUB_OUTPUT"
+            echo 'A newer main commit exists; skipped release.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Promote verified source to deploy branch
+        if: steps.current.outputs.deploy == 'true'
+        run: |
+          set -euo pipefail
+          printf '{"revision":"%s"}\n' "$GITHUB_SHA" > public/version.json
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add public/version.json
+          git commit -m "Release $GITHUB_SHA"
+          git fetch origin deploy || true
+          git push --force-with-lease origin HEAD:refs/heads/deploy
+          echo "Published validated revision: $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/setup-python@v5
+        if: steps.current.outputs.deploy == 'true' && vars.COOLIFY_DEPLOY_ENABLED == 'true'
+        with:
+          python-version: '3.13'
+      - name: Deploy and verify public revision
+        if: steps.current.outputs.deploy == 'true' && vars.COOLIFY_DEPLOY_ENABLED == 'true'
+        env:
+          COOLIFY_APPLICATION_UUID: ${{ vars.COOLIFY_APPLICATION_UUID }}
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+          COOLIFY_READ_TOKEN: ${{ secrets.COOLIFY_READ_TOKEN }}
+          COOLIFY_DEPLOY_TOKEN: ${{ secrets.COOLIFY_DEPLOY_TOKEN }}
+        run: python scripts/deploy.py --revision "$GITHUB_SHA"
+      - name: Setup reminder
+        if: steps.current.outputs.deploy == 'true' && vars.COOLIFY_DEPLOY_ENABLED != 'true'
+        run: echo 'CI and deploy branch are ready. Complete README setup and set COOLIFY_DEPLOY_ENABLED=true to enable Coolify deployment.' >> "$GITHUB_STEP_SUMMARY"
