@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { guidePaths, type PartSlot } from '../hangul'
 import { WRITING_REFERENCE, strokePath, type Point, type Stroke } from '../font'
-const props = defineProps<{ character: string; strokes: Stroke[]; thickness: number }>()
+const props = defineProps<{ character: string; strokes: Stroke[]; thickness: number; part?: PartSlot }>()
 const emit = defineEmits<{ commit: [stroke: Stroke] }>()
 const current = ref<Stroke>([])
 const activePointer = ref<number | null>(null)
@@ -36,7 +37,8 @@ function finish(event: PointerEvent) {
     <rect width="500" height="500" fill="url(#paper-dots)" />
     <rect x="65" y="65" width="370" height="370" rx="2" class="guide-box" />
     <path d="M250 65V435M65 250H435" class="guide-line" />
-    <text v-if="!strokes.length && !current.length" :x="WRITING_REFERENCE.centerX" :y="WRITING_REFERENCE.baseline" :font-size="WRITING_REFERENCE.fontSize" text-anchor="middle" class="ghost-character">{{ character }}</text>
+    <g v-if="part" class="part-guide" aria-hidden="true"><rect :x="part.box.x - 12" :y="part.box.y - 12" :width="part.box.width + 24" :height="part.box.height + 24" rx="8" class="part-target" /><path v-for="(path, index) in guidePaths(part)" :key="index" :d="path" class="part-reference" /></g>
+    <text v-if="!part && !strokes.length && !current.length" :x="WRITING_REFERENCE.centerX" :y="WRITING_REFERENCE.baseline" :font-size="WRITING_REFERENCE.fontSize" text-anchor="middle" class="ghost-character">{{ character }}</text>
     <g class="ink"><path v-for="(path, index) in paths" :key="index" :d="path" /></g>
     <path :d="`M65 ${WRITING_REFERENCE.baseline}H435`" class="baseline" />
   </svg>
