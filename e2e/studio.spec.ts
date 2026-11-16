@@ -54,7 +54,7 @@ test('exported OTF contains drawn Hangul and loads as a real font', async ({ pag
   await page.getByRole('slider', { name: '글자 간격' }).press('End')
   await page.getByRole('button', { name: '이 느낌으로 할게요' }).click()
   await page.getByRole('button', { name: '글꼴 내보내기' }).click()
-  await page.getByLabel('글꼴 이름').fill('My Handwriting')
+  await page.getByLabel('글꼴 이름').fill('나의 손글씨')
   const downloadPromise = page.waitForEvent('download')
   await page.getByRole('button', { name: 'OTF 글꼴 다운로드 ↓' }).click()
   const download = await downloadPromise

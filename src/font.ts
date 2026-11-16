@@ -72,7 +72,10 @@ export async function createFont(glyphs: Glyphs, settings: Settings, name: strin
     entries.push(new Glyph({ name: `uni${code.toString(16).toUpperCase()}`, unicode: code, advanceWidth: 1000 + settings.spacing, path }))
   }
   if (entries.length === 2) throw new Error('글자를 하나 이상 쓴 뒤 다운로드해주세요.')
-  const font = new Font({ familyName: name.trim() || 'My Geulgyeol', styleName: 'Regular', unitsPerEm: 1000, ascender: 800, descender: -200, glyphs: entries })
+  // CFF requires an ASCII PostScript name even when the displayed family name is Korean.
+  const familyName = name.trim() || 'My Geulgyeol'
+  const suffix = [...familyName].map(char => char.codePointAt(0)!.toString(16)).join('').slice(0, 40)
+  const font = new Font({ familyName, postScriptName: `Geulgyeol-${suffix}`, styleName: 'Regular', unitsPerEm: 1000, ascender: 800, descender: -200, glyphs: entries })
   return font.toArrayBuffer()
 }
 
