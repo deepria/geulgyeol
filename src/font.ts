@@ -1,10 +1,11 @@
 import { isBrushId, orientContour, strokeBrush, strokeContours, strokePoints, type BrushId, type Contour, type Point, type Stroke } from './brushes'
 export type { Point, Stroke } from './brushes'
+import { MAX_BASE_BYTES, openType, readBaseFont, preserveLayoutTables, renameFont, scaleCustomPath, type BaseFontRecord } from './base-font'
 import { availableCharacters, compositionParts, placeStrokes, SLOT_BY_ID, type Components } from './hangul'
 
 export type Glyphs = Record<string, Stroke[]>
 export interface Settings { thickness: number; scale: number; spacing: number; brush?: BrushId }
-export interface Project { version: 3; glyphs: Glyphs; components: Components; characters: string[]; settings: Settings; preview: string; name: string; mode: 'direct' | 'compose' }
+export interface Project { version: 4; glyphs: Glyphs; components: Components; characters: string[]; settings: Settings; preview: string; name: string; mode: 'direct' | 'compose'; baseFont?: BaseFontRecord; baseTargets: string[] }
 export const STARTER = '안녕하세요 나만의 손글씨로 오늘을 기록해요. 작은 마음이 모여 좋은 하루가 됩니다.'
 export const DEFAULT_SETTINGS: Settings = { thickness: 13, scale: 1, spacing: 0, brush: 'pen' }
 // The faint reference is a 285-unit font inside a 500-unit writing area.
@@ -33,9 +34,9 @@ export function strokePath(stroke: Stroke, thickness: number): string {
 }
 
 export function parseProject(text: string): Project {
-  if (text.length > 24_000_000) throw new Error('작업 파일은 24MB 이하로 불러올 수 있어요.')
+  if (text.length > 64_000_000) throw new Error('작업 파일은 64MB 이하로 불러올 수 있어요.')
   const data = JSON.parse(text)
-  if (!data || ![1, 2, 3].includes(data.version) || !Array.isArray(data.characters) || data.characters.length > 200) throw new Error('글결에서 저장한 작업 파일을 선택해주세요.')
+  if (!data || ![1, 2, 3, 4].includes(data.version) || !Array.isArray(data.characters) || data.characters.length > 200) throw new Error('글결에서 저장한 작업 파일을 선택해주세요.')
   const validChar = (char: unknown): char is string => typeof char === 'string' && [...char].length === 1 && !/\s/u.test(char)
   if (!data.characters.every(validChar)) throw new Error('글자 목록이 올바르지 않아요.')
   let total = 0
@@ -62,7 +63,15 @@ export function parseProject(text: string): Project {
   const components = readStrokes(data.version === 1 ? {} : data.components, true)
   const settings = data.settings
   if (!settings || !Number.isFinite(settings.thickness) || settings.thickness < 4 || settings.thickness > 30 || !Number.isFinite(settings.scale) || settings.scale < 0.7 || settings.scale > 1.2 || !Number.isFinite(settings.spacing) || settings.spacing < -50 || settings.spacing > 150 || (settings.brush !== undefined && !isBrushId(settings.brush))) throw new Error('글꼴 조절 값이 올바르지 않아요.')
-  return { version: 3, glyphs, components, characters: [...new Set([...data.characters, ...Object.keys(glyphs)])].slice(0, 200), settings: { thickness: settings.thickness, scale: settings.scale, spacing: settings.spacing, brush: settings.brush ?? 'pen' }, preview: typeof data.preview === 'string' ? data.preview.slice(0, 500) : STARTER, name: typeof data.name === 'string' ? data.name.slice(0, 40) : 'My Geulgyeol', mode: data.mode === 'compose' ? 'compose' : 'direct' }
+  let baseFont: BaseFontRecord | undefined
+  if (data.version === 4 && data.baseFont !== undefined) {
+    const record = data.baseFont
+    if (!record || typeof record.fileName !== 'string' || record.fileName.length > 120 || !/^[a-f0-9]{64}$/.test(record.id) || (record.data !== undefined && (typeof record.data !== 'string' || record.data.length > Math.ceil(MAX_BASE_BYTES / 3) * 4))) throw new Error('베이스 폰트 정보가 올바르지 않아요.')
+    baseFont = { fileName: record.fileName, id: record.id, ...(record.data === undefined ? {} : { data: record.data }) }
+  }
+  const targets = data.version === 4 ? data.baseTargets ?? [] : []
+  if (!Array.isArray(targets) || targets.length > 200 || !targets.every(validChar)) throw new Error('커스텀할 글자 목록이 올바르지 않아요.')
+  return { version: 4, baseFont, baseTargets: [...new Set(targets)], glyphs, components, characters: [...new Set([...data.characters, ...Object.keys(glyphs)])].slice(0, 200), settings: { thickness: settings.thickness, scale: settings.scale, spacing: settings.spacing, brush: settings.brush ?? 'pen' }, preview: typeof data.preview === 'string' ? data.preview.slice(0, 500) : STARTER, name: typeof data.name === 'string' ? data.name.slice(0, 40) : 'My Geulgyeol', mode: data.mode === 'compose' ? 'compose' : 'direct' }
 }
 
 // Reduce redundant outline points before expanding shared components into 11,172 glyphs.
@@ -89,13 +98,23 @@ function simplifyContour(points: number[][], tolerance = .65): number[][] {
   return [...simplifyOpen(points.slice(0, half + 1)), ...simplifyOpen([...points.slice(half), points[0]!]).slice(1, -1)]
 }
 
-export async function createFont(glyphs: Glyphs, settings: Settings, name: string, components: Components = {}, onProgress?: (completed: number, total: number) => void): Promise<ArrayBuffer> {
-  const { Font, Glyph, Path } = await import('opentype.js')
+export async function createFont(glyphs: Glyphs, settings: Settings, name: string, components: Components = {}, onProgress?: (completed: number, total: number) => void, baseInput?: { buffer: ArrayBuffer; targets: string[] }): Promise<ArrayBuffer> {
+  const { Font, Glyph, Path } = await openType()
   const missing = new Path()
   missing.moveTo(180, 0); missing.lineTo(180, 700); missing.lineTo(820, 700); missing.lineTo(820, 0); missing.close()
   missing.moveTo(230, 50); missing.lineTo(770, 50); missing.lineTo(770, 650); missing.lineTo(230, 650); missing.close()
-  const entries = [new Glyph({ name: '.notdef', advanceWidth: 1000, path: missing }), new Glyph({ name: 'space', unicode: 32, advanceWidth: 500 + settings.spacing, path: new Path() })]
-  const characters = availableCharacters(glyphs, components)
+  const base = baseInput ? await readBaseFont(baseInput.buffer, 'base-font') : undefined
+  const entries = base ? [] : [new Glyph({ name: '.notdef', advanceWidth: 1000, path: missing }), new Glyph({ name: 'space', unicode: 32, advanceWidth: 500 + settings.spacing, path: new Path() })]
+  const characters = availableCharacters(glyphs, components).filter(char => !baseInput || baseInput.targets.includes(char))
+  const originalAliases = new Map<number, number[]>()
+  if (base) {
+    for (const [code,index] of base.codes) { if (!originalAliases.has(index)) originalAliases.set(index,[]); originalAliases.get(index)!.push(code) }
+    for (let index=0;index<base.font.glyphs.length;index++) {
+      const glyph = base.font.glyphs.get(index)
+      glyph.unicodes = [...originalAliases.get(index) ?? []]
+      glyph.unicode = glyph.unicodes[0]
+    }
+  }
   const cache = new Map<string, Contour[]>()
   const transform = glyphTransform(settings.scale)
   for (let index = 0; index < characters.length; index++) {
@@ -119,16 +138,46 @@ export async function createFont(glyphs: Glyphs, settings: Settings, name: strin
       path.close()
     }
     const code = char.codePointAt(0)!
-    entries.push(new Glyph({ name: `uni${code.toString(16).toUpperCase()}`, unicode: code, advanceWidth: 1000 + settings.spacing, path }))
+    if (base) {
+      const index = base.codes.get(code), original = index === undefined ? undefined : base.font.glyphs.get(index)
+      const advance = original?.advanceWidth ?? base.font.unitsPerEm
+      scaleCustomPath(path, advance || base.font.unitsPerEm, base.font.unitsPerEm)
+      if (original && original.unicodes.length === 1) original.path = path
+      else {
+        if (original) { original.unicodes = original.unicodes.filter(value=>value!==code); original.unicode=original.unicodes[0] }
+        if (base.font.glyphs.length >= 65535) throw new Error('폰트에 추가할 수 있는 글자 수를 초과했어요.')
+        const glyph = new Glyph({ name:`custom${code.toString(16)}`,unicode:code,advanceWidth:advance,path })
+        base.font.glyphs.push(base.font.glyphs.length,()=>glyph)
+      }
+    } else entries.push(new Glyph({ name: `uni${code.toString(16).toUpperCase()}`, unicode: code, advanceWidth: 1000 + settings.spacing, path }))
   }
-  if (entries.length === 2) throw new Error('글자를 하나 이상 쓴 뒤 다운로드해주세요.')
+  if (!base && entries.length === 2) throw new Error('글자를 하나 이상 쓴 뒤 다운로드해주세요.')
   // CFF requires an ASCII PostScript name even when the displayed family name is Korean.
   const familyName = name.trim() || 'My Geulgyeol'
   const suffix = [...familyName].map(char => char.codePointAt(0)!.toString(16)).join('').slice(0, 40)
-  const font = new Font({ familyName, postScriptName: `Geulgyeol-${suffix}`, styleName: 'Regular', unitsPerEm: 1000, ascender: 800, descender: -200, glyphs: entries })
+  const font = base?.font ?? new Font({ familyName, postScriptName: `Geulgyeol-${suffix}`, styleName: 'Regular', unitsPerEm: 1000, ascender: 800, descender: -200, glyphs: entries })
+  if (base) {
+    renameFont(font, familyName)
+    for (let index=0;index<font.glyphs.length;index++) {
+      const glyph=font.glyphs.get(index)
+      // CFF paths are lazy and still need the original dictionaries while decoding.
+      glyph.path = glyph.path
+      glyph.advanceWidth=Math.max(0,(glyph.advanceWidth ?? font.unitsPerEm)+settings.spacing*font.unitsPerEm/1000)
+    }
+    const codes=Array.from({length:font.glyphs.length},(_,index)=>font.glyphs.get(index).unicodes).flat()
+    const os2=font.tables.os2
+    if(os2){
+      os2.usFirstCharIndex=codes.reduce((min,code)=>Math.min(min,code),0xffff)
+      os2.usLastCharIndex=Math.min(0xffff,codes.reduce((max,code)=>Math.max(max,code),0))
+      for(const field of ['xAvgCharWidth','ulUnicodeRange1','ulUnicodeRange2','ulUnicodeRange3','ulUnicodeRange4'])delete os2[field]
+    }
+    // Layout tables are restored as raw bytes after writing, keeping original glyph IDs.
+    // TrueType hinting and CID-specific CFF dictionaries cannot be reused for new CFF outlines.
+    for (const tag of ['gsub','gpos','gdef','kern','cff','stat','gasp']) delete font.tables[tag]
+  }
   onProgress?.(characters.length, characters.length)
   const result = font.toArrayBuffer()
-  return result
+  return baseInput ? preserveLayoutTables(result, baseInput.buffer) : result
 }
 
 export function download(data: BlobPart, filename: string, type: string) {

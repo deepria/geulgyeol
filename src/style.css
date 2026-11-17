@@ -203,3 +203,17 @@ h3 span { margin-left: 7px; color: #96939a; font-size: 10px; font-weight: 400; }
 .danger-button { display: block; width: 100%; padding: 14px; font-size: 12px; border-radius: 6px; margin-top: 12px; color: #a14349; background: #f4e6e4; }
 .danger-button:hover { background: #efd7d5; }
 @media(max-width:760px) { .reset-button { padding-inline: 3px; } }
+.brush-apply-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 7px 12px; }
+.brush-picker-heading { align-items: flex-start; }
+.brush-picker-heading>span { flex-shrink: 0; padding-top: 4px; }
+.base-font-card { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; border: 1px solid #d8d9e9; background: #eeeff8; border-radius: 8px; padding: 15px; margin-top: 22px; }
+.base-font-card strong { font-size: 12px; font-weight: 600; color: #474d8c; overflow-wrap: anywhere; }
+.base-font-card p { font-size: 9px; line-height: 1.8; color: #8a8797; margin: 5px 0 0; }
+.base-font-card button { font-size: 10px; background: #fffefa; border-radius: 5px; color: var(--blue); padding: 9px 11px; }
+.base-font-info { flex: 1; min-width: 140px; }
+.base-actions { display: flex; flex-wrap: wrap; gap: 5px; }
+.base-font-card .base-scope { width: 100%; margin-top: 0; font-size: 8px; }
+.preview-glyph.base-glyph { fill: #e2d6ff; }
+.legend-base { background: #e2d6ff; }
+.nearby-samples [data-source=base] .sample-glyph { fill: #7b65a9; }
+@media(max-width:760px) { .base-font-card { padding: 12px; margin-top: 18px; } .base-font-card strong { font-size: 11px; } .base-font-card button { font-size: 9px; padding: 8px; } .brush-picker-heading button { font-size: 8px; } .brush-apply-actions { gap: 5px 10px; } }

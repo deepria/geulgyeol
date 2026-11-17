@@ -37,7 +37,7 @@ test('brush selection preserves old strokes, restyling can be undone, and JSON r
   await page.getByRole('button',{name:'작업 파일로 안전하게 보관하기 ↗'}).click()
   const buffer=await readFile((await(await pending).path())!)
   const project=JSON.parse(buffer.toString())
-  expect(project.version).toBe(3)
+  expect(project.version).toBe(4)
   expect(project.glyphs['안'].map((stroke:{brush:string})=>stroke.brush)).toEqual(['pen','fineliner'])
   await page.addInitScript(()=>localStorage.clear());await page.reload()
   await page.getByLabel('글결 작업 파일 불러오기').setInputFiles({name:'brushes.json',mimeType:'application/json',buffer})
@@ -100,7 +100,7 @@ test('taps and stylus pressure produce finite, distinct brush shapes',async({},i
   }
   const legacy = { version:2, glyphs:{'안':[BRUSH_SAMPLE]}, components:{'initial:0:0':[BRUSH_SAMPLE]}, characters:['안'], settings:{thickness:13,scale:1,spacing:0}, preview:'안', name:'Old' }
   const migrated = parseProject(JSON.stringify(legacy))
-  expect(migrated.version).toBe(3)
+  expect(migrated.version).toBe(4)
   expect(strokePath(migrated.glyphs['안']![0]!,13)).toBe(strokePath(BRUSH_SAMPLE,13))
   expect(strokePath(migrated.components['initial:0:0']![0]!,13)).toBe(strokePath(BRUSH_SAMPLE,13))
   expect(()=>parseProject(JSON.stringify({...legacy,version:3,glyphs:{'안':[{points:BRUSH_SAMPLE,brush:'unknown'}]}}))).toThrow()
@@ -161,7 +161,7 @@ test('reset requires confirmation, allows a backup, and prevents legacy work fro
   await expect(page.locator('.ink path')).toHaveCount(0)
   await expect(page.getByRole('radio',{name:'기본 펜',exact:true})).toHaveAttribute('aria-checked','true')
   await expect(page.locator('.save-state')).toContainText('저장됨')
-  const state=await page.evaluate(()=>({old1:localStorage.getItem('geulgyeol.project.v1'),old2:localStorage.getItem('geulgyeol.project.v2'),current:JSON.parse(localStorage.getItem('geulgyeol.project.v3')!),other:localStorage.getItem('unrelated-preference')}))
+  const state=await page.evaluate(()=>({old1:localStorage.getItem('geulgyeol.project.v1'),old2:localStorage.getItem('geulgyeol.project.v2'),current:JSON.parse(localStorage.getItem('geulgyeol.project.v4')!),other:localStorage.getItem('unrelated-preference')}))
   expect(state.old1).toBeNull();expect(state.old2).toBeNull();expect(state.other).toBe('keep')
   expect(state.current.glyphs).toEqual({});expect(state.current.components).toEqual({})
   expect(state.current.settings).toMatchObject({brush:'pen',thickness:13,scale:1,spacing:0})

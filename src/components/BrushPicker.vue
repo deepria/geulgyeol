@@ -2,8 +2,8 @@
 import { computed } from 'vue'
 import { BRUSHES, BRUSH_SAMPLE, type BrushId } from '../brushes'
 import { strokePath } from '../font'
-const props = defineProps<{ modelValue: BrushId; canApply: boolean }>()
-const emit = defineEmits<{ 'update:modelValue': [brush: BrushId]; apply: [] }>()
+const props = defineProps<{ modelValue: BrushId; canApply: boolean; canApplyAll: boolean; canUndoAll: boolean }>()
+const emit = defineEmits<{ 'update:modelValue': [brush: BrushId]; apply: []; 'apply-all': []; 'undo-all': [] }>()
 const samples = computed(() => BRUSHES.map(brush => ({ ...brush, path: strokePath({ points: BRUSH_SAMPLE, brush: brush.id }, 8) })))
 function keydown(event: KeyboardEvent, index: number) {
   const offset = event.key === 'ArrowRight' || event.key === 'ArrowDown' ? 1 : event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? -1 : 0
@@ -17,7 +17,7 @@ function keydown(event: KeyboardEvent, index: number) {
 
 <template>
   <div class="brush-picker">
-    <div class="brush-picker-heading"><span>도구 고르기</span><button v-if="canApply" class="apply-brush" @click="emit('apply')">현재 글자의 획에 적용 ↗</button></div>
+    <div class="brush-picker-heading"><span>도구 고르기</span><div class="brush-apply-actions"><button v-if="canApplyAll" @click="emit('apply-all')">글자·자소 전체에 적용 ↗</button><button v-if="canUndoAll" @click="emit('undo-all')">전체 적용 취소</button><button v-if="canApply" class="apply-brush" @click="emit('apply')">현재 글자의 획에 적용 ↗</button></div></div>
     <div class="brush-options" role="radiogroup" aria-label="펜과 브러시 선택">
       <button v-for="(brush,index) in samples" :key="brush.id" role="radio" :aria-checked="modelValue === brush.id" :tabindex="modelValue === brush.id ? 0 : -1" :aria-label="brush.name" :title="brush.description" @click="emit('update:modelValue',brush.id)" @keydown="keydown($event,index)">
         <svg viewBox="0 0 120 42" aria-hidden="true"><path :d="brush.path" /></svg><span>{{ brush.name }}</span>
