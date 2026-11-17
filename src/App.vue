@@ -27,10 +27,11 @@ const available = computed(() => availableCharacters(glyphs.value, components.va
 const composedCount = computed(() => available.value.length - allWritten.value.length)
 const characters = ref(uniqueCharacters(STARTER))
 const settings = ref({ ...DEFAULT_SETTINGS })
-const preview = ref('안녕하세요\n나만의 손글씨로\n오늘을 기록해요.')
+const INITIAL_PREVIEW = '안녕하세요\n나만의 손글씨로\n오늘을 기록해요.'
+const preview = ref(INITIAL_PREVIEW)
 const name = ref('My Geulgyeol')
 const currentIndex = ref(0)
-const modal = ref<'adjust' | 'export' | 'characters' | null>(null)
+const modal = ref<'adjust' | 'export' | 'characters' | 'reset' | null>(null)
 const customText = ref('')
 const toast = ref('')
 const saveState = ref('이 기기에 자동 저장')
@@ -50,8 +51,8 @@ let saveTimer: ReturnType<typeof setTimeout> | undefined
 let toastTimer: ReturnType<typeof setTimeout> | undefined
 function notify(message: string) { toast.value = message; clearTimeout(toastTimer); toastTimer = setTimeout(() => toast.value = '', 5000) }
 function persist() {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(project())); saveState.value = '이 기기에 저장됨' }
-  catch { saveState.value = '자동 저장 불가 · 작업 파일을 저장해주세요' }
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(project())); saveState.value = '이 기기에 저장됨'; return true }
+  catch { saveState.value = '자동 저장 불가 · 작업 파일을 저장해주세요'; return false }
 }
 function apply(data: Project) {
   brushUndo.value = null
@@ -134,6 +135,20 @@ function cancelExport() {
   exportWorker?.terminate(); exportWorker = undefined
   rejectExport?.(new DOMException('Cancelled', 'AbortError')); rejectExport = undefined
 }
+function resetProject() {
+  cancelExport()
+  clearTimeout(saveTimer)
+  let cleared = true
+  try { for (const key of [STORAGE_KEY, PREVIOUS_STORAGE_KEY, LEGACY_STORAGE_KEY]) localStorage.removeItem(key) }
+  catch { cleared = false }
+  glyphs.value = {}; components.value = {}; characters.value = uniqueCharacters(STARTER)
+  settings.value = { ...DEFAULT_SETTINGS }; preview.value = INITIAL_PREVIEW; name.value = 'My Geulgyeol'
+  mode.value = 'direct'; currentIndex.value = 0; quickStart.value = true; selectedPartId.value = QUICK_START[0]!
+  brushUndo.value = null; customText.value = ''; exportProgress.value = { completed: 0, total: 0 }
+  const saved = persist()
+  modal.value = null
+  notify(cleared && saved ? '작업을 초기화했어요. 새로운 글씨를 시작해보세요.' : '화면은 초기화했지만 브라우저 저장소를 정리하지 못했어요. 저장 상태를 확인해주세요.')
+}
 function closeModal() { if (busy.value) cancelExport(); modal.value = null }
 async function exportFont() {
   if (busy.value) return
@@ -178,6 +193,7 @@ const previewPaths = (char: string) => previewGlyphs.value[char]?.paths ?? []
       <a class="brand" href="/" aria-label="글결 홈"><span class="brand-mark">ㄱ<span>·</span></span>글결<span class="brand-tag">나만의 한글 손글꼴</span></a>
       <nav aria-label="작업 메뉴">
         <button class="text-button import-button" @click="importer?.click()">불러오기</button>
+        <button class="text-button reset-button" @click="modal = 'reset'"><span aria-hidden="true">↺</span> 초기화</button>
         <button class="text-button save-button" @click="saveProject">작업 저장 <span aria-hidden="true">↓</span></button>
         <button class="export-button" @click="modal = 'export'">글꼴 내보내기 <span aria-hidden="true">↗</span></button>
       </nav>
@@ -236,7 +252,8 @@ const previewPaths = (char: string) => previewGlyphs.value[char]?.paths ?? []
 
     <dialog ref="dialog" class="modal" aria-labelledby="modal-title" @cancel="closeModal" @click="event => { if (event.target === dialog) closeModal() }">
       <div class="modal-inner"><button class="modal-close" aria-label="닫기" @click="closeModal">×</button>
-        <template v-if="modal === 'adjust'"><p class="modal-kicker">MAKE IT YOURS</p><h2 id="modal-title">조금 더, 나답게.</h2><p class="modal-description">미리보기와 다운로드 글꼴에 함께 적용돼요.</p><label class="slider-label">획 굵기 <span>{{ settings.thickness }}</span><input v-model.number="settings.thickness" type="range" min="4" max="30" aria-label="획 굵기" /></label><label class="slider-label">글자 크기 <span>{{ Math.round(settings.scale * 100) }}%</span><input v-model.number="settings.scale" type="range" min="0.7" max="1.2" step="0.01" aria-label="글자 크기" /></label><label class="slider-label">글자 간격 <span>{{ settings.spacing }}</span><input v-model.number="settings.spacing" type="range" min="-50" max="150" step="5" aria-label="글자 간격" /></label><button class="secondary-button" @click="settings = { ...DEFAULT_SETTINGS, brush: settings.brush }">기본값으로</button><button class="primary-button" @click="modal = null">이 느낌으로 할게요</button></template>
+        <template v-if="modal === 'reset'"><p class="modal-kicker">A FRESH START</p><h2 id="modal-title">새로 시작할까요?</h2><p class="modal-description">직접 쓴 글자와 자소, 선택한 도구와 글꼴 조절 값을 모두 처음 상태로 되돌려요.</p><div class="reset-summary"><span>직접 쓴 글자 <strong>{{ allWritten.length }}개</strong></span><span>모은 자소 <strong>{{ completedParts }}개</strong></span></div><p class="export-caveat">보관할 작업은 먼저 파일로 저장해주세요. 이 브라우저에 남아 있는 이전 버전의 작업도 함께 초기화해요. 이미 내려받은 JSON·OTF 파일은 그대로 보관됩니다.</p><button class="primary-button" @click="saveProject">작업 파일 저장 ↓</button><button class="danger-button" @click="resetProject">전체 작업 초기화</button><button class="secondary-button" @click="closeModal">계속 작업하기</button></template>
+        <template v-else-if="modal === 'adjust'"><p class="modal-kicker">MAKE IT YOURS</p><h2 id="modal-title">조금 더, 나답게.</h2><p class="modal-description">미리보기와 다운로드 글꼴에 함께 적용돼요.</p><label class="slider-label">획 굵기 <span>{{ settings.thickness }}</span><input v-model.number="settings.thickness" type="range" min="4" max="30" aria-label="획 굵기" /></label><label class="slider-label">글자 크기 <span>{{ Math.round(settings.scale * 100) }}%</span><input v-model.number="settings.scale" type="range" min="0.7" max="1.2" step="0.01" aria-label="글자 크기" /></label><label class="slider-label">글자 간격 <span>{{ settings.spacing }}</span><input v-model.number="settings.spacing" type="range" min="-50" max="150" step="5" aria-label="글자 간격" /></label><button class="secondary-button" @click="settings = { ...DEFAULT_SETTINGS, brush: settings.brush }">기본값으로</button><button class="primary-button" @click="modal = null">이 느낌으로 할게요</button></template>
         <template v-else-if="modal === 'export'"><p class="modal-kicker">A FONT, ALL YOURS</p><h2 id="modal-title">내 글씨를 글꼴로.</h2><p class="modal-description">준비된 {{ available.length.toLocaleString() }}글자와 공백을 OTF 파일로 만들어요.</p><label class="field-label" for="font-name">글꼴 이름</label><input id="font-name" v-model="name" :disabled="busy" class="text-input" maxlength="40" placeholder="My Geulgyeol" /><div class="export-summary"><span>직접 쓴 글자 {{ allWritten.length }}개 · 자소 조합 {{ composedCount.toLocaleString() }}개</span><p>{{ available.slice(0, 80).join(' ') || '아직 준비된 글자가 없어요.' }}{{ available.length > 80 ? ' …' : '' }}</p></div><p class="export-caveat">직접 쓴 글자를 먼저 담고, 나머지는 준비된 자소로 조합해요. 자소가 부족한 글자는 포함하지 않아요. 172개 자소를 모두 쓰면 현대 한글 11,172자를 만들 수 있어요. 작업 파일도 함께 보관해주세요.</p><button class="primary-button" :disabled="!available.length || busy" @click="exportFont">{{ busy ? '글꼴을 만들고 있어요…' : 'OTF 글꼴 다운로드 ↓' }}</button><div v-if="busy" class="export-progress" role="status"><progress :value="exportProgress.completed" :max="exportProgress.total || 1"></progress><p>{{ exportProgress.completed === exportProgress.total ? '파일을 마무리하고 있어요…' : `${exportProgress.completed.toLocaleString()} / ${exportProgress.total.toLocaleString()}글자 만드는 중` }}</p><button @click="cancelExport">생성 취소</button></div><button class="secondary-button" @click="saveProject">편집용 작업 파일 저장</button></template>
         <template v-else-if="modal === 'characters'"><p class="modal-kicker">ONE LETTER AT A TIME</p><h2 id="modal-title">다음엔 뭘 써볼까요?</h2><p class="modal-description">단어나 문장을 넣으면 필요한 글자만 추가해요.<br />같은 글자는 한 번만. 한 작업에 최대 200글자.</p><div class="preset-buttons"><button @click="customText = '사랑해 고마워 행복한 생일 축하해 늘 함께하자'">마음을 전하는 말</button><button @click="customText = '월화수목금토일 년월일 0123456789!?.,:()-'">날짜와 숫자</button><button @click="customText = '가나다라마바사아자차카타파하'">가나다 기초</button></div><label class="field-label" for="custom-characters">쓰고 싶은 문장</label><textarea id="custom-characters" v-model="customText" maxlength="500" class="text-input" rows="4" placeholder="예: 너의 모든 순간을 응원해" /><button class="primary-button" @click="addCharacters(customText)">글자 추가하기 +</button></template>
       </div>

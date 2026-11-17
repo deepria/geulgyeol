@@ -194,3 +194,12 @@ h3 span { margin-left: 7px; color: #96939a; font-size: 10px; font-weight: 400; }
 .brush-hint { font-size: 9px; color: #918b95; line-height: 1.8; margin: 8px 0 0; }
 .app-footer>a { font-size: 9px; color: #757382; }
 @media(max-width:760px) { .brush-options { gap: 4px; } .brush-options span { font-size: 9px; } .brush-options button { padding-left: 2px; padding-right: 2px; } .brush-hint { font-size: 8px; } }
+.reset-button { color: #8b7580; }
+.reset-button:hover { color: #a33f45; }
+.reset-button>span { font-size: 14px; }
+.reset-summary { display: grid; grid-template-columns: 1fr 1fr; background: #efeee8; border-radius: 7px; padding: 17px; gap: 15px; }
+.reset-summary>span { font-size: 11px; color: #8b8490; }
+.reset-summary strong { display: block; font-size: 23px; font-weight: 500; color: #3c3c55; margin-top: 8px; }
+.danger-button { display: block; width: 100%; padding: 14px; font-size: 12px; border-radius: 6px; margin-top: 12px; color: #a14349; background: #f4e6e4; }
+.danger-button:hover { background: #efd7d5; }
+@media(max-width:760px) { .reset-button { padding-inline: 3px; } }
