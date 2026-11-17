@@ -1,4 +1,5 @@
 import type { Glyphs, Point, Stroke } from './font'
+import { strokePoints, withPoints } from './brushes'
 
 export const INITIALS = [...'ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ']
 export const VOWELS = [...'ㅏㅐㅑㅒㅓㅔㅕㅖㅗㅘㅙㅚㅛㅜㅝㅞㅟㅠㅡㅢㅣ']
@@ -8,7 +9,7 @@ export type Components = Record<string, Stroke[]>
 export interface Box { x: number; y: number; width: number; height: number }
 export interface PartSlot { id: string; kind: PartKind; variant: number; index: number; char: string; description: string; example: string; box: Box }
 export type GlyphSource = 'direct' | 'composed' | 'missing'
-const ink = (strokes?: Stroke[]) => !!strokes?.some(stroke => stroke.length)
+const ink = (strokes?: Stroke[]) => !!strokes?.some(stroke => strokePoints(stroke).length)
 const vertical = (vowel: number) => vowel < 8 || vowel === 20
 const mixed = (vowel: number) => [9, 10, 11, 14, 15, 16, 19].includes(vowel)
 const box = (x: number, y: number, width: number, height: number): Box => ({ x, y, width, height })
@@ -69,7 +70,7 @@ export function glyphSource(char: string, glyphs: Glyphs, components: Components
 }
 export function placeStrokes(strokes: Stroke[], from: Box, to: Box): Stroke[] {
   if (from.x === to.x && from.y === to.y && from.width === to.width && from.height === to.height) return strokes
-  return strokes.map(stroke => stroke.map(([x, y, pressure]) => [to.x + (x - from.x) * to.width / from.width, to.y + (y - from.y) * to.height / from.height, pressure] as Point))
+  return strokes.map(stroke => withPoints(stroke, strokePoints(stroke).map(([x, y, pressure]) => [to.x + (x - from.x) * to.width / from.width, to.y + (y - from.y) * to.height / from.height, pressure] as Point)))
 }
 export function resolvedStrokes(char: string, glyphs: Glyphs, components: Components): Stroke[] {
   const source = glyphSource(char, glyphs, components)

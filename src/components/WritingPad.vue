@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import type { BrushId } from '../brushes'
 import { guidePaths, type PartSlot } from '../hangul'
 import { WRITING_REFERENCE, strokePath, type Point, type Stroke } from '../font'
-const props = defineProps<{ character: string; strokes: Stroke[]; thickness: number; part?: PartSlot }>()
+const props = defineProps<{ character: string; strokes: Stroke[]; thickness: number; brush: BrushId; part?: PartSlot }>()
 const emit = defineEmits<{ commit: [stroke: Stroke] }>()
-const current = ref<Stroke>([])
+const current = ref<Point[]>([])
+const activeBrush = ref<BrushId>('pen')
 const activePointer = ref<number | null>(null)
-const paths = computed(() => [...props.strokes, current.value].filter(stroke => stroke.length).map(stroke => strokePath(stroke, props.thickness)))
+const savedPaths = computed(() => props.strokes.map(stroke => strokePath(stroke, props.thickness)))
+const paths = computed(() => [...savedPaths.value, ...(current.value.length ? [strokePath({ points: current.value, brush: activeBrush.value }, props.thickness)] : [])])
 function point(event: PointerEvent): Point {
   const rect = (event.currentTarget as SVGElement).getBoundingClientRect()
   return [Math.max(0, Math.min(500, (event.clientX - rect.left) / rect.width * 500)), Math.max(0, Math.min(500, (event.clientY - rect.top) / rect.height * 500)), event.pointerType === 'pen' && event.pressure > 0 ? event.pressure : 0.5]
@@ -15,6 +18,7 @@ function start(event: PointerEvent) {
   if (activePointer.value !== null || event.button !== 0) return
   event.preventDefault()
   activePointer.value = event.pointerId
+  activeBrush.value = props.brush
   ;(event.currentTarget as SVGElement).setPointerCapture(event.pointerId)
   current.value = [point(event)]
 }
@@ -26,7 +30,7 @@ function move(event: PointerEvent) {
 }
 function finish(event: PointerEvent) {
   if (activePointer.value !== event.pointerId) return
-  if (current.value.length) emit('commit', current.value.map(p => [...p] as Point))
+  if (current.value.length) emit('commit', { points: current.value.map(p => [...p] as Point), brush: activeBrush.value })
   current.value = []; activePointer.value = null
 }
 </script>

@@ -182,3 +182,15 @@ h3 span { margin-left: 7px; color: #96939a; font-size: 10px; font-weight: 400; }
 .writing-panel { background: #f8f7f3; }
 .preview-panel { align-self: start; position: sticky; top: 0; min-height: calc(100dvh - 88px); }
 @media(max-width:760px) { .preview-panel { position: static; align-self: stretch; min-height: auto; } .nearby-samples { gap: 8px; padding: 12px; } }
+.brush-picker { margin: 0 0 18px; }
+.brush-picker-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 10px; color: #85818d; margin-bottom: 8px; }
+.brush-picker-heading button { font-size: 9px; color: var(--blue); padding: 4px 0; }
+.brush-options { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); gap: 6px; }
+.brush-options button { min-width: 0; padding: 6px 3px 9px; background: #f0eee8; border: 1px solid #e1ded5; border-radius: 7px; color: #75717e; }
+.brush-options button[aria-checked=true] { color: var(--blue); border-color: #737dd4; background: #eceefa; }
+.brush-options button:hover { background: #e7e8f3; }
+.brush-options svg { width: 100%; height: 28px; display: block; fill: currentColor; }
+.brush-options span { font-size: 10px; display: block; margin-top: 3px; }
+.brush-hint { font-size: 9px; color: #918b95; line-height: 1.8; margin: 8px 0 0; }
+.app-footer>a { font-size: 9px; color: #757382; }
+@media(max-width:760px) { .brush-options { gap: 4px; } .brush-options span { font-size: 9px; } .brush-options button { padding-left: 2px; padding-right: 2px; } .brush-hint { font-size: 8px; } }

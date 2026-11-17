@@ -1,13 +1,12 @@
-import { getStroke } from 'perfect-freehand'
+import { isBrushId, orientContour, strokeBrush, strokeContours, strokePoints, type BrushId, type Contour, type Point, type Stroke } from './brushes'
+export type { Point, Stroke } from './brushes'
 import { availableCharacters, compositionParts, placeStrokes, SLOT_BY_ID, type Components } from './hangul'
 
-export type Point = [number, number, number]
-export type Stroke = Point[]
 export type Glyphs = Record<string, Stroke[]>
-export interface Settings { thickness: number; scale: number; spacing: number }
-export interface Project { version: 2; glyphs: Glyphs; components: Components; characters: string[]; settings: Settings; preview: string; name: string; mode: 'direct' | 'compose' }
+export interface Settings { thickness: number; scale: number; spacing: number; brush?: BrushId }
+export interface Project { version: 3; glyphs: Glyphs; components: Components; characters: string[]; settings: Settings; preview: string; name: string; mode: 'direct' | 'compose' }
 export const STARTER = '안녕하세요 나만의 손글씨로 오늘을 기록해요. 작은 마음이 모여 좋은 하루가 됩니다.'
-export const DEFAULT_SETTINGS: Settings = { thickness: 13, scale: 1, spacing: 0 }
+export const DEFAULT_SETTINGS: Settings = { thickness: 13, scale: 1, spacing: 0, brush: 'pen' }
 // The faint reference is a 285-unit font inside a 500-unit writing area.
 // Convert its em size and baseline, rather than shrinking the pad and its margins.
 export const WRITING_REFERENCE = { fontSize: 285, centerX: 250, baseline: 353 } as const
@@ -24,21 +23,19 @@ export function previewTransform(scale: number): string {
   return `matrix(${transform.factor} 0 0 ${transform.factor} ${transform.x} ${transform.y})`
 }
 export const uniqueCharacters = (text: string) => [...new Set([...text.normalize('NFC')].filter(char => !/\s/u.test(char)))].slice(0, 200)
-export const hasInk = (strokes?: Stroke[]) => !!strokes?.some(stroke => stroke.length > 0)
+export const hasInk = (strokes?: Stroke[]) => !!strokes?.some(stroke => strokePoints(stroke).length > 0)
 
-export function outline(stroke: Stroke, thickness: number) {
-  return getStroke(stroke, { size: thickness, thinning: 0.35, smoothing: 0.65, streamline: 0.4, simulatePressure: false, last: true })
-}
 export function strokePath(stroke: Stroke, thickness: number): string {
-  const points = outline(stroke, thickness)
-  if (!points.length) return ''
-  return `M${points.map(point => `${point[0]},${point[1]}`).join('L')}Z`
+  return strokeContours(stroke, thickness).map(contour => {
+    const points = orientContour(contour)
+    return points.length ? `M${points.map(point => `${point[0]},${point[1]}`).join('L')}Z` : ''
+  }).join('')
 }
 
 export function parseProject(text: string): Project {
   if (text.length > 24_000_000) throw new Error('작업 파일은 24MB 이하로 불러올 수 있어요.')
   const data = JSON.parse(text)
-  if (!data || ![1, 2].includes(data.version) || !Array.isArray(data.characters) || data.characters.length > 200) throw new Error('글결에서 저장한 작업 파일을 선택해주세요.')
+  if (!data || ![1, 2, 3].includes(data.version) || !Array.isArray(data.characters) || data.characters.length > 200) throw new Error('글결에서 저장한 작업 파일을 선택해주세요.')
   const validChar = (char: unknown): char is string => typeof char === 'string' && [...char].length === 1 && !/\s/u.test(char)
   if (!data.characters.every(validChar)) throw new Error('글자 목록이 올바르지 않아요.')
   let total = 0
@@ -48,13 +45,15 @@ export function parseProject(text: string): Project {
     for (const [key, strokes] of Object.entries(value)) {
       if (!(components ? Object.hasOwn(SLOT_BY_ID, key) : validChar(key)) || !Array.isArray(strokes) || strokes.length > 200) throw new Error('손글씨 데이터가 올바르지 않아요.')
       result[key] = strokes.map(stroke => {
-        if (!Array.isArray(stroke) || !stroke.length || stroke.length > 10_000) throw new Error('획 데이터가 올바르지 않아요.')
-        total += stroke.length
+        const points = Array.isArray(stroke) ? stroke : stroke?.points
+        const brush = Array.isArray(stroke) ? 'pen' : stroke?.brush
+        if (!isBrushId(brush) || !Array.isArray(points) || !points.length || points.length > 10_000) throw new Error('획 데이터가 올바르지 않아요.')
+        total += points.length
         if (total > 400_000) throw new Error('작업 파일의 획 데이터가 너무 많아요.')
-        return stroke.map(point => {
+        return { brush, points: points.map(point => {
           if (!Array.isArray(point) || point.length !== 3 || !point.every(Number.isFinite) || point[0] < 0 || point[0] > 500 || point[1] < 0 || point[1] > 500 || point[2] < 0 || point[2] > 1) throw new Error('획 좌표가 올바르지 않아요.')
           return [...point] as Point
-        })
+        }) }
       })
     }
     return result
@@ -62,8 +61,8 @@ export function parseProject(text: string): Project {
   const glyphs = readStrokes(data.glyphs, false)
   const components = readStrokes(data.version === 1 ? {} : data.components, true)
   const settings = data.settings
-  if (!settings || !Number.isFinite(settings.thickness) || settings.thickness < 4 || settings.thickness > 30 || !Number.isFinite(settings.scale) || settings.scale < 0.7 || settings.scale > 1.2 || !Number.isFinite(settings.spacing) || settings.spacing < -50 || settings.spacing > 150) throw new Error('글꼴 조절 값이 올바르지 않아요.')
-  return { version: 2, glyphs, components, characters: [...new Set([...data.characters, ...Object.keys(glyphs)])].slice(0, 200), settings: { thickness: settings.thickness, scale: settings.scale, spacing: settings.spacing }, preview: typeof data.preview === 'string' ? data.preview.slice(0, 500) : STARTER, name: typeof data.name === 'string' ? data.name.slice(0, 40) : 'My Geulgyeol', mode: data.mode === 'compose' ? 'compose' : 'direct' }
+  if (!settings || !Number.isFinite(settings.thickness) || settings.thickness < 4 || settings.thickness > 30 || !Number.isFinite(settings.scale) || settings.scale < 0.7 || settings.scale > 1.2 || !Number.isFinite(settings.spacing) || settings.spacing < -50 || settings.spacing > 150 || (settings.brush !== undefined && !isBrushId(settings.brush))) throw new Error('글꼴 조절 값이 올바르지 않아요.')
+  return { version: 3, glyphs, components, characters: [...new Set([...data.characters, ...Object.keys(glyphs)])].slice(0, 200), settings: { thickness: settings.thickness, scale: settings.scale, spacing: settings.spacing, brush: settings.brush ?? 'pen' }, preview: typeof data.preview === 'string' ? data.preview.slice(0, 500) : STARTER, name: typeof data.name === 'string' ? data.name.slice(0, 40) : 'My Geulgyeol', mode: data.mode === 'compose' ? 'compose' : 'direct' }
 }
 
 // Reduce redundant outline points before expanding shared components into 11,172 glyphs.
@@ -97,22 +96,20 @@ export async function createFont(glyphs: Glyphs, settings: Settings, name: strin
   missing.moveTo(230, 50); missing.lineTo(770, 50); missing.lineTo(770, 650); missing.lineTo(230, 650); missing.close()
   const entries = [new Glyph({ name: '.notdef', advanceWidth: 1000, path: missing }), new Glyph({ name: 'space', unicode: 32, advanceWidth: 500 + settings.spacing, path: new Path() })]
   const characters = availableCharacters(glyphs, components)
-  const cache = new Map<string, number[][][]>()
+  const cache = new Map<string, Contour[]>()
   const transform = glyphTransform(settings.scale)
   for (let index = 0; index < characters.length; index++) {
     const char = characters[index]!
     if (index % 96 === 0) { onProgress?.(index, characters.length); await new Promise(resolve => setTimeout(resolve, 0)) }
     const path = new Path()
-    const contours = hasInk(glyphs[char]) ? glyphs[char]!.map(stroke => outline(stroke, settings.thickness)) : compositionParts(char).flatMap(({ slot, box }) => {
+    const contours = hasInk(glyphs[char]) ? glyphs[char]!.flatMap(stroke => strokeContours(stroke, settings.thickness)) : compositionParts(char).flatMap(({ slot, box }) => {
       const key = `${slot.id}:${box.x},${box.y},${box.width},${box.height}`
-      if (!cache.has(key)) cache.set(key, placeStrokes(components[slot.id]!, slot.box, box).map(stroke => simplifyContour(outline(stroke, settings.thickness))))
+      if (!cache.has(key)) cache.set(key, placeStrokes(components[slot.id]!, slot.box, box).flatMap(stroke => strokeContours(stroke, settings.thickness).map(contour => ({ ...contour, points: contour.hole ? contour.points : simplifyContour(contour.points, strokeBrush(stroke) === 'pencil' ? .4 : .65) }))))
       return cache.get(key)!
     })
-    for (const points of contours) {
+    for (const contour of contours) {
+      const points = orientContour(contour)
       if (!points.length) continue
-      // Keep every contour's winding consistent so crossing pen strokes stay filled.
-      const area = points.reduce((sum, p, i) => { const q = points[(i + 1) % points.length]!; return sum + p[0]! * q[1]! - q[0]! * p[1]! }, 0)
-      if (area < 0) points.reverse()
       points.forEach((p, index) => {
         const x = (p[0]! * transform.factor + transform.x) * 2
         const y = 800 - (p[1]! * transform.factor + transform.y) * 2

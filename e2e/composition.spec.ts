@@ -49,7 +49,7 @@ test('quick start composes complete syllables and direct handwriting overrides t
   const pending = page.waitForEvent('download')
   await page.getByRole('button', { name: '작업 파일로 안전하게 보관하기 ↗' }).click()
   const json = JSON.parse((await readFile((await (await pending).path())!)).toString())
-  expect(json.version).toBe(2)
+  expect(json.version).toBe(3)
   expect(QUICK_START.every(id => json.components[id]?.length)).toBe(true)
   await page.addInitScript(() => localStorage.clear())
   await page.reload()
@@ -72,10 +72,11 @@ test('legacy projects retain their drawings and tabs support keyboard switching'
   await expect(tab).toBeFocused()
   await expect(page.locator('.ink path')).toHaveCount(1)
   await expect(page.locator('.save-state')).toContainText('저장됨')
-  const saved = await page.evaluate(() => ({ old: JSON.parse(localStorage.getItem('geulgyeol.project.v1')!), current: JSON.parse(localStorage.getItem('geulgyeol.project.v2')!) }))
+  const saved = await page.evaluate(() => ({ old: JSON.parse(localStorage.getItem('geulgyeol.project.v1')!), current: JSON.parse(localStorage.getItem('geulgyeol.project.v3')!) }))
   expect(saved.old).toEqual(old)
-  expect(saved.current.version).toBe(2)
-  expect(saved.current.glyphs).toEqual(old.glyphs)
+  expect(saved.current.version).toBe(3)
+  expect(saved.current.glyphs['안'].map((stroke: {points: unknown}) => stroke.points)).toEqual(old.glyphs['안'])
+  expect(saved.current.glyphs['안'][0].brush).toBe('pen')
 })
 
 test('172 contextual slots cover every modern syllable without filling missing parts', async ({}, info) => {

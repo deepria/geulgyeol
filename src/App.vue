@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import WritingPad from './components/WritingPad.vue'
+import BrushPicker from './components/BrushPicker.vue'
+import { BRUSHES, restyleStroke } from './brushes'
 import { STARTER, DEFAULT_SETTINGS, download, hasInk, parseProject, previewTransform, strokePath, uniqueCharacters, type Glyphs, type Project, type Stroke } from './font'
 
 import { PART_SLOTS, SLOT_BY_ID, QUICK_START, VARIANT_LABELS, availableCharacters, glyphSource, resolvedStrokes, type Components, type PartKind } from './hangul'
 
-const STORAGE_KEY = 'geulgyeol.project.v2'
+const STORAGE_KEY = 'geulgyeol.project.v3'
+const PREVIOUS_STORAGE_KEY = 'geulgyeol.project.v2'
 const LEGACY_STORAGE_KEY = 'geulgyeol.project.v1'
 const glyphs = ref<Glyphs>({})
 const components = ref<Components>({})
@@ -32,6 +35,7 @@ const customText = ref('')
 const toast = ref('')
 const saveState = ref('이 기기에 자동 저장')
 const busy = ref(false)
+const brushUndo = ref<Stroke[] | null>(null)
 const importer = ref<HTMLInputElement | null>(null)
 const dialog = ref<HTMLDialogElement | null>(null)
 const current = computed(() => mode.value === 'compose' ? currentPart.value.char : characters.value[currentIndex.value] ?? '안')
@@ -41,7 +45,7 @@ const allWritten = computed(() => Object.keys(glyphs.value).filter(char => hasIn
 const previewLetters = computed(() => [...preview.value.normalize('NFC')])
 const missing = computed(() => uniqueCharacters(preview.value).filter(char => glyphSource(char, glyphs.value, components.value) === 'missing'))
 const progress = computed(() => Math.round(written.value / characters.value.length * 100))
-const project = (): Project => ({ version: 2, glyphs: glyphs.value, components: components.value, mode: mode.value, characters: characters.value, settings: settings.value, preview: preview.value, name: name.value })
+const project = (): Project => ({ version: 3, glyphs: glyphs.value, components: components.value, mode: mode.value, characters: characters.value, settings: settings.value, preview: preview.value, name: name.value })
 let saveTimer: ReturnType<typeof setTimeout> | undefined
 let toastTimer: ReturnType<typeof setTimeout> | undefined
 function notify(message: string) { toast.value = message; clearTimeout(toastTimer); toastTimer = setTimeout(() => toast.value = '', 5000) }
@@ -50,6 +54,7 @@ function persist() {
   catch { saveState.value = '자동 저장 불가 · 작업 파일을 저장해주세요' }
 }
 function apply(data: Project) {
+  brushUndo.value = null
   glyphs.value = data.glyphs; components.value = data.components; mode.value = data.mode; characters.value = data.characters.length ? data.characters : uniqueCharacters(STARTER)
   quickStart.value = QUICK_START.some(id => !hasInk(data.components[id]))
   const order = quickStart.value ? QUICK_START : PART_SLOTS.map(slot => slot.id)
@@ -57,24 +62,27 @@ function apply(data: Project) {
   settings.value = data.settings; preview.value = data.preview; name.value = data.name; currentIndex.value = 0
 }
 onMounted(() => {
-  try { const saved = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(LEGACY_STORAGE_KEY); if (saved) apply(parseProject(saved)) }
+  try { const saved = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(PREVIOUS_STORAGE_KEY) ?? localStorage.getItem(LEGACY_STORAGE_KEY); if (saved) apply(parseProject(saved)) }
   catch { notify('저장된 작업을 읽지 못했어요. 작업 파일이 있다면 불러와주세요.') }
   window.addEventListener('keydown', keyboard)
   window.addEventListener('pagehide', persist)
 })
 watch([glyphs, components, mode, characters, settings, preview, name], () => { saveState.value = '저장 중…'; clearTimeout(saveTimer); saveTimer = setTimeout(persist, 400) }, { deep: true })
+watch([mode, current, selectedPartId], () => { brushUndo.value = null })
 watch(modal, value => { if (value) { if (!dialog.value?.open) dialog.value?.showModal() } else dialog.value?.close() })
 onBeforeUnmount(() => { cancelExport(); clearTimeout(saveTimer); clearTimeout(toastTimer); persist(); window.removeEventListener('keydown', keyboard); window.removeEventListener('pagehide', persist) })
 function setStrokes(value: Stroke[]) {
   if (mode.value === 'compose') components.value[selectedPartId.value] = value
   else glyphs.value[current.value] = value
 }
+function applyBrush() { brushUndo.value = strokes.value; setStrokes(strokes.value.map(stroke => restyleStroke(stroke, settings.value.brush ?? 'pen'))); notify(`현재 글자의 획을 ${BRUSHES.find(brush => brush.id === settings.value.brush)?.name ?? '기본 펜'}으로 바꿨어요.`) }
 function commit(stroke: Stroke) {
   if (strokes.value.length >= 200) { notify('한 글자에 최대 200획까지 쓸 수 있어요.'); return }
+  brushUndo.value = null
   setStrokes([...strokes.value, stroke])
 }
-function undo() { if (strokes.value.length) setStrokes(strokes.value.slice(0, -1)) }
-function clear() { if (strokes.value.length && confirm(`‘${current.value}’에 쓴 획을 모두 지울까요?`)) setStrokes([]) }
+function undo() { if (brushUndo.value) { setStrokes(brushUndo.value); brushUndo.value = null } else if (strokes.value.length) setStrokes(strokes.value.slice(0, -1)) }
+function clear() { if (strokes.value.length && confirm(`‘${current.value}’에 쓴 획을 모두 지울까요?`)) { brushUndo.value = null; setStrokes([]) } }
 function next() {
   if (mode.value === 'direct') { currentIndex.value = (currentIndex.value + 1) % characters.value.length; return }
   const order = quickStart.value ? QUICK_START : PART_SLOTS.map(slot => slot.id)
@@ -93,7 +101,7 @@ function previous() {
   else { const order = quickStart.value ? QUICK_START : PART_SLOTS.map(slot => slot.id); selectedPartId.value = order[Math.max(0, order.indexOf(selectedPartId.value) - 1)]! }
 }
 function keyboard(event: KeyboardEvent) {
-  if (modal.value || (event.target instanceof HTMLElement && (event.target.closest('[role=tablist]') || event.target.matches('input,textarea,select') || event.target.isContentEditable))) return
+  if (modal.value || (event.target instanceof HTMLElement && (event.target.closest('[role=tablist],[role=radiogroup]') || event.target.matches('input,textarea,select') || event.target.isContentEditable))) return
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') { event.preventDefault(); undo() }
   if (event.key === 'ArrowRight') { event.preventDefault(); next() }
   if (event.key === 'ArrowLeft') { event.preventDefault(); previous() }
@@ -215,19 +223,20 @@ const previewPaths = (char: string) => previewGlyphs.value[char]?.paths ?? []
         </div>
         <div class="writing-heading"><div><p class="kicker">{{ mode === 'compose' ? `예: ${currentPart.example}의 ${{ initial: '초성', vowel: '중성', final: '받침' }[currentPart.kind]} · 표시된 칸에 자소만 쓰세요` : '서두르지 말고, 평소 글씨 그대로' }}</p><h2 id="writing-heading">‘{{ current }}’{{ mode === 'compose' ? ' 자소를' : /[가-힣]/.test(current) && (current.charCodeAt(0) - 0xac00) % 28 !== 0 ? '을' : '를' }} 써주세요<span class="heading-dot">.</span></h2></div><span class="character-position"><strong>{{ String(mode === 'compose' ? partPosition : currentIndex + 1).padStart(2, '0') }}</strong> / {{ mode === 'compose' ? quickStart ? 5 : 172 : characters.length }}</span></div>
         <div v-if="mode === 'compose'" class="nearby-samples" aria-label="바로 보는 조합 결과"><span>바로 보는<br />조합 결과</span><div v-for="sample in nearbySamples" :key="sample.char" :data-source="sample.source"><svg v-if="sample.paths.length" class="sample-glyph" viewBox="0 0 500 500" :aria-label="sample.char"><g :transform="previewTransform(settings.scale)"><path v-for="(path, index) in sample.paths" :key="index" :d="path" /></g></svg><span v-else class="sample-fallback">{{ sample.char }}</span><small>{{ { direct: '직접 쓴 글자', composed: '조합 완료', missing: '자소 준비 중' }[sample.source] }}</small></div></div>
-        <div class="pad-frame"><WritingPad :key="mode === 'compose' ? selectedPartId : current" :part="mode === 'compose' ? currentPart : undefined" :character="current" :strokes="strokes" :thickness="settings.thickness" @commit="commit" /><span class="pad-caption">마우스 · 손가락 · 펜으로 자유롭게</span><span class="pad-corner" aria-hidden="true">↙</span></div>
-        <div class="drawing-actions"><div><button :disabled="!strokes.length" @click="undo"><span aria-hidden="true">↶</span> 한 획 취소</button><button :disabled="!strokes.length" @click="clear">지우기</button></div><button class="next-button" @click="next">{{ mode === 'compose' ? quickStart && selectedPartId === QUICK_START[4] ? '전체 자소로' : '다음 자소' : currentIndex === characters.length - 1 ? '처음 글자로' : '다음 글자' }} <span aria-hidden="true">→</span></button></div>
+        <BrushPicker :model-value="settings.brush ?? 'pen'" :can-apply="strokes.length > 0" @update:model-value="settings.brush = $event" @apply="applyBrush" />
+        <div class="pad-frame"><WritingPad :key="mode === 'compose' ? selectedPartId : current" :part="mode === 'compose' ? currentPart : undefined" :character="current" :strokes="strokes" :thickness="settings.thickness" :brush="settings.brush ?? 'pen'" @commit="commit" /><span class="pad-caption">마우스 · 손가락 · 펜으로 자유롭게</span><span class="pad-corner" aria-hidden="true">↙</span></div>
+        <div class="drawing-actions"><div><button :disabled="!strokes.length" @click="undo"><span aria-hidden="true">↶</span> {{ brushUndo ? '도구 적용 취소' : '한 획 취소' }}</button><button :disabled="!strokes.length" @click="clear">지우기</button></div><button class="next-button" @click="next">{{ mode === 'compose' ? quickStart && selectedPartId === QUICK_START[4] ? '전체 자소로' : '다음 자소' : currentIndex === characters.length - 1 ? '처음 글자로' : '다음 글자' }} <span aria-hidden="true">→</span></button></div>
         <div v-if="mode === 'direct'" class="letter-library"><div class="library-heading"><h3>나의 글자들 <span>{{ written }} / {{ characters.length }}</span></h3><button @click="modal = 'characters'">글자 추가 +</button></div><div class="progress-track" role="progressbar" :aria-valuenow="written" :aria-valuemax="characters.length" aria-label="작성한 글자 수"><span :style="{ width: `${progress}%` }"></span></div><div class="letter-grid"><button v-for="(char, index) in characters" :key="char" :class="{ selected: index === currentIndex, written: hasInk(glyphs[char]) }" :aria-label="`${char}${hasInk(glyphs[char]) ? ', 작성 완료' : ', 아직 안 씀'}`" :aria-pressed="index === currentIndex" @click="currentIndex = index">{{ char }}<i v-if="hasInk(glyphs[char])"></i></button></div></div>
         <div v-else class="letter-library part-library"><div class="library-heading"><h3>모은 자소 <span>{{ completedParts }} / 172</span></h3><span class="ready-count">조합 {{ composedCount.toLocaleString() }}자</span></div><div class="progress-track" role="progressbar" :aria-valuenow="completedParts" :aria-valuemax="172" aria-label="작성한 자소 수"><span :style="{ width: `${completedParts / 172 * 100}%` }"></span></div><div class="letter-grid"><button v-for="slot in visibleParts" :key="slot.id" :class="{ selected: slot.id === selectedPartId, written: hasInk(components[slot.id]) }" :aria-label="`${slot.char}, ${slot.description}${hasInk(components[slot.id]) ? ', 작성 완료' : ', 아직 안 씀'}`" :aria-pressed="slot.id === selectedPartId" @click="quickStart = false; selectedPartId = slot.id">{{ slot.char }}<i v-if="hasInk(components[slot.id])"></i></button></div><p class="part-help">{{ currentPart.description }}에 쓰이는 형태예요. 같은 자소도 위치에 따라 따로 준비해요.</p></div>
         </div>
         <p class="local-note"><span aria-hidden="true">◇</span> 글씨는 이 브라우저에만 저장돼요. 서버로 전송하지 않아요.</p>
       </section>
     </main>
-    <footer class="app-footer"><span>글결 <span class="footer-divider">/</span> 글씨에 담긴 나다움</span><span>자소를 조합하고 손글씨로 다듬는 한글 글꼴 도구</span><button @click="saveProject">작업 파일로 안전하게 보관하기 ↗</button></footer>
+    <footer class="app-footer"><span>글결 <span class="footer-divider">/</span> 글씨에 담긴 나다움</span><span>자소를 조합하고 손글씨로 다듬는 한글 글꼴 도구</span><button @click="saveProject">작업 파일로 안전하게 보관하기 ↗</button><a href="/brush-licenses.txt" target="_blank" rel="noopener noreferrer">브러시 출처·라이선스 ↗</a></footer>
 
     <dialog ref="dialog" class="modal" aria-labelledby="modal-title" @cancel="closeModal" @click="event => { if (event.target === dialog) closeModal() }">
       <div class="modal-inner"><button class="modal-close" aria-label="닫기" @click="closeModal">×</button>
-        <template v-if="modal === 'adjust'"><p class="modal-kicker">MAKE IT YOURS</p><h2 id="modal-title">조금 더, 나답게.</h2><p class="modal-description">미리보기와 다운로드 글꼴에 함께 적용돼요.</p><label class="slider-label">획 굵기 <span>{{ settings.thickness }}</span><input v-model.number="settings.thickness" type="range" min="4" max="30" aria-label="획 굵기" /></label><label class="slider-label">글자 크기 <span>{{ Math.round(settings.scale * 100) }}%</span><input v-model.number="settings.scale" type="range" min="0.7" max="1.2" step="0.01" aria-label="글자 크기" /></label><label class="slider-label">글자 간격 <span>{{ settings.spacing }}</span><input v-model.number="settings.spacing" type="range" min="-50" max="150" step="5" aria-label="글자 간격" /></label><button class="secondary-button" @click="settings = { ...DEFAULT_SETTINGS }">기본값으로</button><button class="primary-button" @click="modal = null">이 느낌으로 할게요</button></template>
+        <template v-if="modal === 'adjust'"><p class="modal-kicker">MAKE IT YOURS</p><h2 id="modal-title">조금 더, 나답게.</h2><p class="modal-description">미리보기와 다운로드 글꼴에 함께 적용돼요.</p><label class="slider-label">획 굵기 <span>{{ settings.thickness }}</span><input v-model.number="settings.thickness" type="range" min="4" max="30" aria-label="획 굵기" /></label><label class="slider-label">글자 크기 <span>{{ Math.round(settings.scale * 100) }}%</span><input v-model.number="settings.scale" type="range" min="0.7" max="1.2" step="0.01" aria-label="글자 크기" /></label><label class="slider-label">글자 간격 <span>{{ settings.spacing }}</span><input v-model.number="settings.spacing" type="range" min="-50" max="150" step="5" aria-label="글자 간격" /></label><button class="secondary-button" @click="settings = { ...DEFAULT_SETTINGS, brush: settings.brush }">기본값으로</button><button class="primary-button" @click="modal = null">이 느낌으로 할게요</button></template>
         <template v-else-if="modal === 'export'"><p class="modal-kicker">A FONT, ALL YOURS</p><h2 id="modal-title">내 글씨를 글꼴로.</h2><p class="modal-description">준비된 {{ available.length.toLocaleString() }}글자와 공백을 OTF 파일로 만들어요.</p><label class="field-label" for="font-name">글꼴 이름</label><input id="font-name" v-model="name" :disabled="busy" class="text-input" maxlength="40" placeholder="My Geulgyeol" /><div class="export-summary"><span>직접 쓴 글자 {{ allWritten.length }}개 · 자소 조합 {{ composedCount.toLocaleString() }}개</span><p>{{ available.slice(0, 80).join(' ') || '아직 준비된 글자가 없어요.' }}{{ available.length > 80 ? ' …' : '' }}</p></div><p class="export-caveat">직접 쓴 글자를 먼저 담고, 나머지는 준비된 자소로 조합해요. 자소가 부족한 글자는 포함하지 않아요. 172개 자소를 모두 쓰면 현대 한글 11,172자를 만들 수 있어요. 작업 파일도 함께 보관해주세요.</p><button class="primary-button" :disabled="!available.length || busy" @click="exportFont">{{ busy ? '글꼴을 만들고 있어요…' : 'OTF 글꼴 다운로드 ↓' }}</button><div v-if="busy" class="export-progress" role="status"><progress :value="exportProgress.completed" :max="exportProgress.total || 1"></progress><p>{{ exportProgress.completed === exportProgress.total ? '파일을 마무리하고 있어요…' : `${exportProgress.completed.toLocaleString()} / ${exportProgress.total.toLocaleString()}글자 만드는 중` }}</p><button @click="cancelExport">생성 취소</button></div><button class="secondary-button" @click="saveProject">편집용 작업 파일 저장</button></template>
         <template v-else-if="modal === 'characters'"><p class="modal-kicker">ONE LETTER AT A TIME</p><h2 id="modal-title">다음엔 뭘 써볼까요?</h2><p class="modal-description">단어나 문장을 넣으면 필요한 글자만 추가해요.<br />같은 글자는 한 번만. 한 작업에 최대 200글자.</p><div class="preset-buttons"><button @click="customText = '사랑해 고마워 행복한 생일 축하해 늘 함께하자'">마음을 전하는 말</button><button @click="customText = '월화수목금토일 년월일 0123456789!?.,:()-'">날짜와 숫자</button><button @click="customText = '가나다라마바사아자차카타파하'">가나다 기초</button></div><label class="field-label" for="custom-characters">쓰고 싶은 문장</label><textarea id="custom-characters" v-model="customText" maxlength="500" class="text-input" rows="4" placeholder="예: 너의 모든 순간을 응원해" /><button class="primary-button" @click="addCharacters(customText)">글자 추가하기 +</button></template>
       </div>
